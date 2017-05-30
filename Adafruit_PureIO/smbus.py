@@ -192,7 +192,7 @@ class SMBus(object):
         assert self._device is not None, 'Bus must be opened before operations are made against it!'
         # Build ctypes values to marshall between ioctl and Python.
         if cmd_length == 1:
-            reg = c_uint8(cmd)
+            reg = c_uint8(cmd & 0xFF)
         elif cmd_length == 2:
             reg = c_char_p(chr(cmd >> 8) + chr(cmd & 0xFF))
         else:
@@ -266,15 +266,22 @@ class SMBus(object):
         data[1:] = vals[0:]
         self.write_i2c_block_data(addr, cmd, data)
 
-    def write_i2c_block_data(self, addr, cmd, vals):
+    def write_i2c_block_data(self, addr, cmd, vals, cmd_length=1):
         """Write a buffer of data to the specified cmd register of the device.
+        cmd_length=2 allows for 16-bit cmd addressing 
         """
         assert self._device is not None, 'Bus must be opened before operations are made against it!'
         # Construct a string of data to send, including room for the command register.
-        data = bytearray(len(vals)+1)
-        data[0] = cmd & 0xFF  # Command register at the start.
-        data[1:] = vals[0:]   # Copy in the block data (ugly but necessary to ensure
-                              # the entire write happens in one transaction).
+        data = bytearray(len(vals)+cmd_length)
+        if cmd_length == 1:
+            data[0] = cmd & 0xFF  # Command register at the start.
+        elif cmd_length == 2:
+            data[0] = cmd >> 8
+            data[1] = cmd & 0xFF
+        else:
+            raise NotImplementedError('cmd_length must be 1 or 2.')
+        data[cmd_length:] = vals[0:]   # Copy in the block data (ugly but necessary to ensure
+                                       # the entire write happens in one transaction).
         # Send the data to the device.
         self._select_device(addr)
         self._device.write(data)
