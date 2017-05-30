@@ -184,17 +184,23 @@ class SMBus(object):
         # ioctl won't work.
         raise NotImplementedError()
 
-    def read_i2c_block_data(self, addr, cmd, length=32):
+    def read_i2c_block_data(self, addr, cmd, cmd_length=1, length=32):
         """Perform a read from the specified cmd register of device.  Length number
         of bytes (default of 32) will be read and returned as a bytearray.
+        Possibility to send 2-byte commands with cmd_length=2. Default is smb 1-byte cmd.
         """
         assert self._device is not None, 'Bus must be opened before operations are made against it!'
         # Build ctypes values to marshall between ioctl and Python.
-        reg = c_uint8(cmd)
+        if cmd_length == 1:
+            reg = c_uint8(cmd)
+        elif cmd_length == 2:
+            reg = c_char_p(chr(cmd >> 8) + chr(cmd & 0xFF))
+        else:
+            raise NotImplementedError('cmd_length must be 1 or 2.')
         result = create_string_buffer(length)
         # Build ioctl request.
         request = make_i2c_rdwr_data([
-            (addr, 0, 1, pointer(reg)),             # Write cmd register.
+            (addr, 0, cmd_length, cast(reg, POINTER(c_uint8))),   # Write cmd register.
             (addr, I2C_M_RD, length, cast(result, POINTER(c_uint8)))   # Read data.
         ])
         # Make ioctl call and return result data.
